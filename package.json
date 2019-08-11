@@ -1,7 +1,7 @@
 {
-  "name": "es3ify",
-  "version": "0.2.2",
-  "description": "Browserify transform to convert ES5 syntax to be ES3-compatible.",
+  "name": "es3ify-mw",
+  "version": "0.2.3",
+  "description": "Browserify transform to convert ES5 syntax to be ES3-compatible (mediawiki version).",
   "main": "index.js",
   "dependencies": {
     "esprima": "^2.7.1",
@@ -13,16 +13,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/spicyj/es3ify.git"
+    "url": "git://github.com/pa001024/es3ify-mw.git"
   },
   "scripts": {
     "test": "jasmine-node spec"
   },
-  "homepage": "https://github.com/spicyj/es3ify",
+  "homepage": "https://github.com/pa001024/es3ify-mw",
   "author": {
     "name": "Ben Alpert",
     "email": "ben@benalpert.com",
-    "url": "http://benalpert.com"
+    "url": "http://benalpert.com",
+    "modifier": "pa001024"
   },
   "license": "MIT"
 }

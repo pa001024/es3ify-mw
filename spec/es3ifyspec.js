@@ -3,7 +3,7 @@ var transform = require('../index.js').transform;
 describe('es3ify', function() {
     it('should quote property keys', function() {
         expect(transform('x = {dynamic: 0, static: 17, null: 34};'))
-                .toEqual('x = {dynamic: 0, "static": 17, "null": 34};');
+                .toEqual('var $__0;x = ($__0={},$__0.dynamic= 0,$__0.static=  17,$__0.null=  34,$__0);');
     });
 
     it('should quote member properties', function() {
@@ -33,6 +33,6 @@ describe('es3ify', function() {
 
     it('should transform everything at once', function() {
         expect(transform('({a:2,\tfor :[2,,3,],}\n.class)'))
-                .toEqual('({a:2,\t"for" :[2,,3]}[\n"class"])');
+                .toEqual('var $__0;(($__0={},$__0.a=2,$__0.for=\t[2,,3],$__0)[\n"class"])');
     });
 });

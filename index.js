@@ -2,6 +2,7 @@ var Syntax = require('esprima').Syntax;
 var jstransform = require('jstransform');
 var through = require('through');
 var utils = require('jstransform/src/utils');
+var es6ObjectComputedProperties = require('./property').visitorList[0];
 
 var reserved = [
     "break", "case", "catch", "continue", "default", "delete", "do", "else",
@@ -101,6 +102,7 @@ visitArrayOrObjectExpression.test = function(node, path, state) {
 var visitorList = [
     visitMemberExpression,
     visitProperty,
+    es6ObjectComputedProperties,
     visitArrayOrObjectExpression
 ];
 
