@@ -1,8 +1,7 @@
 var Syntax = require('esprima').Syntax;
 var jstransform = require('jstransform');
-var through = require('through');
+// var through = require('through');
 var utils = require('jstransform/src/utils');
-var es6ObjectComputedProperties = require('./property').visitorList[0];
 
 var reserved = [
     "break", "case", "catch", "continue", "default", "delete", "do", "else",
@@ -15,127 +14,112 @@ var reserved = [
     "synchronized", "throws", "transient", "volatile", "null"
 ];
 var reservedDict = {};
-reserved.forEach(function(k) {
+reserved.forEach(function (k) {
     reservedDict[k] = true;
 });
 
-// In: x.class = 3;
-// Out: x["class"] = 3;
-function visitMemberExpression(traverse, node, path, state) {
-    traverse(node.object, path, state);
-    utils.catchup(node.object.range[1], state);
-    utils.append('[', state);
-    utils.catchupWhiteSpace(node.property.range[0], state);
-    utils.append('"', state);
-    utils.catchup(node.property.range[1], state);
-    utils.append('"]', state);
-    return false;
-}
-visitMemberExpression.test = function(node, path, state) {
-    return node.type === Syntax.MemberExpression &&
-        node.property.type === Syntax.Identifier &&
-        reservedDict[node.property.name] === true;
-};
+var es6ObjectConciseMethods = require('jstransform/visitors/es6-object-concise-method-visitors');
+var es7SpreadProperties = require('jstransform/visitors/es7-spread-property-visitors');
 
-// In: x = {class: 2};
-// Out: x = {"class": 2};
-function visitProperty(traverse, node, path, state) {
-    utils.catchup(node.key.range[0], state);
-    utils.append('"', state);
-    utils.catchup(node.key.range[1], state);
-    utils.append('"', state);
-    utils.catchup(node.value.range[0], state);
-    traverse(node.value, path, state);
-    return false;
-}
-visitProperty.test = function(node, path, state) {
-    return node.type === Syntax.Property &&
-        node.key.type === Syntax.Identifier &&
-        reservedDict[node.key.name] === true;
-};
+var Syntax = require('esprima-fb').Syntax;
+var utils = require('jstransform/src/utils');
 
-var reCommaOrComment = /,|\/\*.+?\*\/|\/\/[^\n]+/g;
-function stripComma(value) {
-  return value.replace(reCommaOrComment, function(text) {
-    if (text === ',') {
-        return '';
-    } else {
-        // Preserve comments
-        return text;
-    }
-  });
-}
-
-// In: [1, 2, 3,]
-// Out: [1, 2, 3]
-function visitArrayOrObjectExpression(traverse, node, path, state) {
-    // Copy the opening '[' or '{'
-    utils.catchup(node.range[0] + 1, state);
-
-    var elements = node.type === Syntax.ArrayExpression ?
-        node.elements :
-        node.properties;
-    elements.forEach(function(element, i) {
-        if (element == null && i === elements.length - 1) {
-            throw new Error(
-                "Elisions ending an array are interpreted inconsistently " +
-                "in IE8; remove the extra comma or use 'undefined' explicitly");
-        }
-        if (element != null) {
-            // Copy commas from after previous element, if any
-            utils.catchup(element.range[0], state);
-            traverse(element, path, state);
-            utils.catchup(element.range[1], state);
-        }
-    });
-
-    // Skip over a trailing comma, if any
-    utils.catchup(node.range[1] - 1, state, stripComma);
+function process(traverse, node, path, state) {
+    utils.catchupWhiteSpace(node.range[0], state);
+    traverse(node, path, state);
     utils.catchup(node.range[1], state);
+}
+
+/**
+ * Note: This visitor is capable of handling the following transforms too:
+ * - ES7 object literal spread,
+ * - ES6 object concise methods,
+ * - ES6 object short notation,
+ * This is because of limitations in the jstransform framework, which isn't
+ * capable of feeding the output of one visitor to another. Additionally,
+ * any attempt to share logic between these visitors only increases code
+ * complixity. And so, we are forced to create a single complex one that
+ * handles all cases.
+ *
+ * {alpha: 12, \'beta\': 34, ['gam' + 'ma']: 56} // before
+ * (_={},_.alpha=12,_['beta']=34,_['gam' + 'ma']=56,_) // after
+ */
+function es6ObjectComputedProperties(traverse, node, path, state) {
+    var obj = utils.injectTempVar(state);
+    utils.append('(' + obj + '={}', state);
+    for (var ii = 0; ii < node.properties.length; ++ii) {
+        var property = node.properties[ii];
+        utils.append(',', state);
+
+        if (property.type === Syntax.SpreadProperty) {
+            utils.append('Object.assign(' + obj, state);
+            var nextComputedPropertyIndex = ii + 1;
+            while (
+                nextComputedPropertyIndex < node.properties.length &&
+                !node.properties[nextComputedPropertyIndex].computed
+            ) {
+                nextComputedPropertyIndex += 1;
+            }
+            utils.catchupWhiteSpace(node.properties[ii].range[0], state);
+            var lastWasSpread = es7SpreadProperties.renderSpreadProperties(
+                traverse,
+                node.properties.slice(ii, nextComputedPropertyIndex),
+                path,
+                state,
+                true // previousWasSpread
+            );
+            utils.append((lastWasSpread ? '' : '}') + ')', state);
+            ii = nextComputedPropertyIndex - 1;
+            continue;
+
+            // short notation / dot access
+        } else if (
+            property.type === Syntax.Property &&
+            property.key.type === Syntax.Identifier &&
+            !property.computed
+        ) {
+            utils.append(obj + '.' + property.key.name + '=', state);
+
+            // literals / computed properties
+        } else if (property.type === Syntax.Property) {
+            utils.append(obj + '[', state);
+            process(traverse, property.key, path, state);
+            utils.append(']=', state);
+        }
+
+        // concise methods
+        if (property.method === true) {
+            utils.catchupWhiteSpace(property.key.range[1], state);
+            es6ObjectConciseMethods.renderConciseMethod(traverse, property, path, state);
+        }
+        process(traverse, property.value, path, state);
+    }
+    utils.catchupWhiteSpace(node.range[1], state);
+    utils.append(',' + obj + ')', state);
     return false;
 }
-visitArrayOrObjectExpression.test = function(node, path, state) {
-    return node.type === Syntax.ArrayExpression ||
-        node.type === Syntax.ObjectExpression;
+es6ObjectComputedProperties.test = function (node, path, state) {
+    if (node.type !== Syntax.ObjectExpression) {
+        return false;
+    }
+    for (var ii = 0; ii < node.properties.length; ++ii) {
+        if (reservedDict[node.properties[ii].key.name]) {
+            return true;
+        }
+    }
+    return false;
 };
 
 var visitorList = [
-    visitMemberExpression,
-    visitProperty,
-    es6ObjectComputedProperties,
-    visitArrayOrObjectExpression
+    es6ObjectComputedProperties
 ];
 
 function transform(code) {
     return jstransform.transform(visitorList, code).code;
 }
 
-function process(file) {
-    if (/\.json$/.test(file)) return through();
-    var data = '';
-    function write(chunk) {
-        data += chunk;
-    }
-
-    function compile() {
-
-        var source;
-
-        try {
-          source = transform(data);
-        } catch (e) {
-          return this.emit('error', e);
-        }
-
-        this.queue(source);
-        this.queue(null);
-    }
-
-    return through(write, compile);
-}
-
 module.exports = process;
-module.exports.isReserved = function(word) {
+module.exports.isReserved = function (word) {
     return reservedDict.hasOwnProperty(word) ? !!reservedDict[word] : false;
 };
 module.exports.transform = transform;

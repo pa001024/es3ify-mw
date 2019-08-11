@@ -1,12 +1,11 @@
 {
   "name": "es3ify-mw",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Browserify transform to convert ES5 syntax to be ES3-compatible (mediawiki version).",
   "main": "index.js",
   "dependencies": {
     "esprima": "^2.7.1",
-    "jstransform": "~11.0.0",
-    "through": "~2.3.4"
+    "jstransform": "~11.0.0"
   },
   "devDependencies": {
     "jasmine-node": "~1.13.1"
